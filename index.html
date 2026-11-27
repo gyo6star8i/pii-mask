@@ -51,6 +51,12 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .zbar button{min-width:44px;padding:0 12px}
 .zbar output{min-width:56px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
 .zbar small{color:var(--mute);font-size:13px;margin-left:6px}
+.tsc{flex:1 0 100%;overflow-x:auto;overflow-y:hidden;height:18px;scrollbar-width:auto}
+.tsc>div{height:1px}
+.tsc::-webkit-scrollbar,.viewer::-webkit-scrollbar{height:14px}
+.tsc::-webkit-scrollbar-track,.viewer::-webkit-scrollbar-track{background:var(--line);border-radius:7px}
+.tsc::-webkit-scrollbar-thumb,.viewer::-webkit-scrollbar-thumb{background:var(--mute);border-radius:7px;border:3px solid var(--line)}
+.tsc::-webkit-scrollbar-thumb:hover,.viewer::-webkit-scrollbar-thumb:hover{background:var(--ink)}
 .viewer{display:flex;flex-direction:column;gap:28px;overflow-x:auto;padding:24px 2px 8px}
 .pg{position:relative;flex:none;width:min(100%,900px);margin:0 auto;background:#fff;box-shadow:0 1px 0 var(--line),0 10px 30px rgba(60,20,20,.15);user-select:none;touch-action:none}
 .pg canvas{display:block;width:100%;height:auto}
@@ -155,6 +161,7 @@ footer{font-size:13px;color:var(--mute);text-align:center;padding:24px 16px 40px
         <button type="button" id="zIn" aria-label="확대">+</button>
         <button type="button" id="zFit">폭 맞춤</button>
         <small>Ctrl + 마우스 휠로도 조절</small>
+        <div class="tsc hide" id="tsc" aria-hidden="true"><div></div></div>
       </div>
       <div class="viewer" id="viewer"></div>
     </div>
@@ -302,14 +309,20 @@ function applyZoom(anchor){
   const top=v.getBoundingClientRect().top+scrollY+r.fy*v.scrollHeight-innerHeight/2;
   if(isFinite(top))scrollTo({top:Math.max(0,top)});
   v.scrollLeft=Math.max(0,r.fx*v.scrollWidth-v.clientWidth/2);
+  syncTop();
 }
+/* 상단 가로 스크롤바: 뷰어와 폭·위치를 맞춤 */
+const tsc=$("#tsc");
+function syncTop(){const v=$('#viewer'),over=v.scrollWidth>v.clientWidth+1;tsc.classList.toggle('hide',!over);if(!over)return;tsc.firstElementChild.style.width=v.scrollWidth+'px';tsc.style.width=v.clientWidth+'px';tsc.scrollLeft=v.scrollLeft}
+tsc.addEventListener('scroll',()=>{const v=$('#viewer');if(Math.abs(v.scrollLeft-tsc.scrollLeft)>1)v.scrollLeft=tsc.scrollLeft},{passive:true});
+$('#viewer').addEventListener('scroll',()=>{const v=$('#viewer');if(Math.abs(v.scrollLeft-tsc.scrollLeft)>1)tsc.scrollLeft=v.scrollLeft},{passive:true});
 function stepZoom(d,anchor){const i=ZS.indexOf(zoom),n=ZS[Math.max(0,Math.min(ZS.length-1,(i<0?2:i)+d))];if(n!==zoom){zoom=n;applyZoom(anchor)}}
 $('#zIn').addEventListener('click',()=>stepZoom(1));
 $('#zOut').addEventListener('click',()=>stepZoom(-1));
 $('#zFit').addEventListener('click',()=>{zoom=1;applyZoom()});
 $('#viewer').addEventListener('wheel',e=>{if(!(e.ctrlKey||e.metaKey))return;e.preventDefault();const v=$('#viewer'),b=v.getBoundingClientRect();stepZoom(e.deltaY<0?1:-1,{fx:(e.clientX-b.left+v.scrollLeft)/v.scrollWidth,fy:(e.clientY-b.top)/v.scrollHeight})},{passive:false});
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey)||$('#work').classList.contains('hide'))return;if(e.key==='='||e.key==='+'){e.preventDefault();stepZoom(1)}else if(e.key==='-'){e.preventDefault();stepZoom(-1)}else if(e.key==='0'){e.preventDefault();zoom=1;applyZoom()}});
-let rzt;addEventListener('resize',()=>{clearTimeout(rzt);rzt=setTimeout(()=>{if(pages.length&&zoom!==1)applyZoom()},150)});
+let rzt;addEventListener('resize',()=>{clearTimeout(rzt);rzt=setTimeout(()=>{if(pages.length){if(zoom!==1)applyZoom();else syncTop()}},150)});
 function render(){
   document.querySelectorAll('.pg').forEach((el,i)=>{
     const p=pages[i],ov=el.querySelector('.ov');
