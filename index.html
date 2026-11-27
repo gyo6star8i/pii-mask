@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF 개인정보 마스킹</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* VOICE: 차분하고 실무적인 행정 도구 — 군더더기 없이 확신을 주는 말투
+   IDEA: 공문서 위에 검은 수정 띠를 긋는 '열람 제한 처리' 책상
+   PICTURE: 실제 PDF 페이지와 그 위에 놓이는 마스킹 띠 자체 (빈 화면에선 가려진 문서 도해)
+   COLOUR and TYPE: 옅은 분홍 바탕 #ffe3dc, 먹색 #1a1817, 청록 #0d7680, 자주 #990f3d / Libre Franklin + Noto Sans KR
+   LAYOUT: 왼쪽 조작 패널, 오른쪽 페이지 뷰어. 600px 미만에선 제목-뷰어-패널 순으로 쌓기 */
+:root{color-scheme:light dark;--bg:light-dark(#ffe3dc,#1c1512);--paper:light-dark(#fff8f5,#261d19);--ink:light-dark(#1a1817,#f3e9e4);--mute:light-dark(#6b5f5a,#b3a49d);--line:light-dark(#e9c6bc,#3d2f29);--teal:light-dark(#0d7680,#4fb7c0);--claret:light-dark(#990f3d,#ff6f9a);--hit:light-dark(rgba(153,15,61,.28),rgba(255,111,154,.32))}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Libre Franklin","Noto Sans KR",system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(20px,3vw,40px) max(4vw,16px)}
+h1{font:900 clamp(28px,4vw,44px)/1.1 "Noto Sans KR",sans-serif;margin:0 0 8px;text-wrap:balance;letter-spacing:-.02em}
+h2{font:700 15px/1.3 "Noto Sans KR",sans-serif;margin:0 0 10px}
+.lede{margin:0;color:var(--mute);max-width:62ch}
+.lede b{color:var(--teal)}
+.wrap{max-width:1240px;margin:0 auto}
+.app{display:grid;grid-template-columns:320px minmax(0,1fr);gap:24px;align-items:start}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+.sec{padding:14px 0;border-top:1px solid var(--line)}.sec:first-child{border-top:0;padding-top:0}
+label.ck{display:flex;gap:10px;align-items:center;padding:5px 0;font-size:15px;cursor:pointer}
+label.ck input{width:18px;height:18px;accent-color:var(--claret);flex:none}
+label.ck small{color:var(--mute);margin-left:auto;font-size:13px}
+textarea{width:100%;font:16px/1.4 inherit;font-family:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);min-height:70px;resize:vertical}
+button,.btn{font:600 15px/1 "Noto Sans KR",sans-serif;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+button.pri{background:var(--claret);border-color:var(--claret);color:#fff}
+button.sec2{border-color:var(--teal);color:var(--teal)}
+button:disabled{opacity:.4;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.seg{display:inline-flex;border:1px solid var(--ink);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0}.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.list{list-style:none;margin:0;padding:0;font-size:14px}
+.list li{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}
+.list li input{width:18px;height:18px;accent-color:var(--claret);flex:none}
+.list .t{color:var(--mute);font-size:13px;white-space:nowrap}
+.list .v{font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+.list .p{margin-left:auto;color:var(--teal);font-size:13px;white-space:nowrap;cursor:pointer;background:none;border:0;min-height:32px;padding:0 4px}
+.stat{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--mute);margin:0 0 14px}
+.stat b{color:var(--ink);font-size:20px;font-weight:800;margin-right:4px}
+.note{font-size:13px;color:var(--mute);margin:8px 0 0}
+.warn{background:light-dark(#fff1c2,#3a2f10);border-left:4px solid #c08a00;padding:10px 12px;border-radius:6px;font-size:14px;margin:0 0 14px}
+.viewer{display:flex;flex-direction:column;gap:22px}
+.pg{position:relative;max-width:900px;width:100%;margin:0 auto;background:#fff;box-shadow:0 1px 0 var(--line),0 10px 30px rgba(60,20,20,.15);user-select:none;touch-action:none}
+.pg canvas{display:block;width:100%;height:auto}
+.pg .ov{position:absolute;inset:0;cursor:crosshair}
+.pg .no{position:absolute;top:-22px;left:0;font-size:13px;color:var(--mute)}
+.bx{position:absolute;background:var(--hit);outline:2px solid var(--claret);cursor:pointer}
+.bx.man{outline-color:var(--teal);background:light-dark(rgba(13,118,128,.25),rgba(79,183,192,.3))}
+.bx.off{background:transparent;outline:2px dashed #999}
+.bx.tmp{outline:2px dashed var(--teal);background:transparent;pointer-events:none}
+.final .bx{background:#000;outline:0}.final .bx.off{display:none}.final .ov{cursor:default}
+.flash{animation:fl 1.2s ease 2}@keyframes fl{50%{outline-width:6px}}
+@media(prefers-reduced-motion:reduce){.flash{animation:none}}
+.drop{border:2px dashed var(--claret);border-radius:14px;background:var(--paper);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,300px);gap:24px;align-items:center;padding:clamp(20px,4vw,48px);cursor:pointer;min-height:360px}
+.drop.over{background:light-dark(#ffd2c6,#33241f)}
+.drop h2{font-size:clamp(22px,3vw,30px);font-weight:900;margin-bottom:12px}
+.drop svg{width:100%;height:auto}
+.steps{margin:14px 0 18px;padding-left:20px;color:var(--mute)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:10px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:9}
+.toast.on{opacity:1}
+footer{font-size:13px;color:var(--mute);text-align:center;padding:24px 16px 40px}
+.hide{display:none!important}
+@media(max-width:860px){.app{grid-template-columns:minmax(0,1fr)}.panel{position:static;max-height:none;order:2}.drop{grid-template-columns:minmax(0,1fr)}.drop svg{max-width:240px;margin:0 auto;order:-1}}
+</style>
+</head>
+<body>
+<header class="band wrap">
+  <h1>PDF 개인정보 마스킹</h1>
+  <p class="lede">주민등록번호·전화번호·이메일·성명 칸 등을 자동으로 찾아 검게 가린 뒤, <b>글자 정보까지 지운 PDF</b>로 저장합니다. 파일은 이 브라우저 안에서만 처리되며 어디에도 전송되지 않습니다.</p>
+</header>
+
+<main class="band wrap" style="padding-top:0">
+  <section id="empty">
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="PDF 파일 선택">
+      <div>
+        <h2>PDF를 여기에 끌어다 놓으세요</h2>
+        <p style="margin:0">또는 눌러서 파일을 고르세요. PNG·JPG 이미지도 됩니다.</p>
+        <ol class="steps">
+          <li>자동 탐지된 항목을 확인하고, 빠진 곳은 드래그로 직접 가립니다.</li>
+          <li>‘결과 미리보기’로 검게 가려진 모습을 확인합니다.</li>
+          <li>마스킹된 PDF를 저장해 Claude에 첨부합니다.</li>
+        </ol>
+        <button class="pri" type="button" id="pick">파일 선택</button>
+      </div>
+      <svg viewBox="0 0 300 360" aria-hidden="true">
+        <rect x="34" y="22" width="240" height="320" rx="6" fill="rgba(60,20,20,.12)"/>
+        <rect x="24" y="12" width="240" height="320" rx="6" fill="#fff" stroke="#e9c6bc"/>
+        <rect x="48" y="40" width="120" height="14" rx="2" fill="#1a1817"/>
+        <g fill="#d9cfcb"><rect x="48" y="78" width="40" height="9"/><rect x="48" y="104" width="52" height="9"/><rect x="48" y="130" width="52" height="9"/><rect x="48" y="156" width="40" height="9"/><rect x="48" y="200" width="192" height="7"/><rect x="48" y="216" width="176" height="7"/><rect x="48" y="232" width="188" height="7"/><rect x="48" y="248" width="120" height="7"/><rect x="48" y="282" width="150" height="7"/></g>
+        <rect x="104" y="74" width="64" height="17" fill="#000"/>
+        <rect x="116" y="100" width="44" height="17" fill="#d9cfcb" opacity=".6"/><rect x="164" y="100" width="70" height="17" fill="#000"/>
+        <rect x="116" y="126" width="110" height="17" fill="#000"/>
+        <rect x="104" y="152" width="126" height="17" fill="#000"/>
+        <rect x="204" y="276" width="44" height="17" fill="#000"/>
+        <g transform="rotate(-12 220 70)"><rect x="176" y="52" width="86" height="34" rx="4" fill="none" stroke="#990f3d" stroke-width="3"/><text x="219" y="75" text-anchor="middle" font-family="Noto Sans KR,sans-serif" font-weight="900" font-size="16" fill="#990f3d">마스킹</text></g>
+      </svg>
+    </div>
+    <input type="file" id="file" accept="application/pdf,image/png,image/jpeg" class="hide">
+  </section>
+
+  <section id="work" class="app hide">
+    <aside class="panel" aria-label="마스킹 설정">
+      <div class="sec">
+        <p class="stat" id="stat"></p>
+        <div class="row">
+          <div class="seg" role="group" aria-label="보기 방식">
+            <button type="button" id="vEdit" aria-pressed="true">편집 보기</button>
+            <button type="button" id="vFinal" aria-pressed="false">결과 미리보기</button>
+          </div>
+        </div>
+        <p class="note">페이지 위를 드래그하면 직접 가릴 수 있어요. 상자를 누르면 해제·삭제됩니다. Ctrl+Z로 직접 그린 상자를 되돌립니다.</p>
+      </div>
+      <div class="sec">
+        <h2>자동 탐지 항목</h2>
+        <div id="pats"></div>
+        <label class="ck"><input type="checkbox" id="rrnTail"> 주민번호는 뒷자리 7자리만 가리기</label>
+      </div>
+      <div class="sec">
+        <h2>직접 지정할 단어</h2>
+        <textarea id="words" placeholder="예) 홍길동, 구미초등학교, 010-0000"></textarea>
+        <p class="note">쉼표나 줄바꿈으로 구분. 이름, 학교명, 주소 일부 등 문서에 나오는 그대로 적으면 모든 쪽에서 찾아 가립니다.</p>
+      </div>
+      <div class="sec">
+        <div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">찾은 항목</h2><button type="button" class="sec2" id="clrMan" style="min-height:36px;font-size:13px;padding:0 10px">직접 그린 상자 지우기</button></div>
+        <ul class="list" id="list"></ul>
+      </div>
+      <div class="sec">
+        <h2>저장</h2>
+        <div class="row">
+          <button type="button" class="pri" id="savePdf">마스킹 PDF 저장</button>
+          <button type="button" id="copyTxt">가린 텍스트 복사</button>
+          <button type="button" id="saveTxt">텍스트(.txt) 저장</button>
+        </div>
+        <p class="note">PDF는 각 쪽을 이미지로 굳혀 저장하므로 가린 글자를 복사·검색으로 되살릴 수 없습니다. 텍스트 복사는 가린 글자를 ■로 바꿔 Claude 대화창에 바로 붙여넣을 때 씁니다.</p>
+        <div class="row" style="margin-top:12px"><button type="button" id="reset">다른 파일 열기</button></div>
+      </div>
+    </aside>
+    <div>
+      <p class="warn" id="warn">자동 탐지는 보조 수단입니다. 저장 전에 모든 쪽을 ‘결과 미리보기’로 직접 확인하세요.</p>
+      <div class="viewer" id="viewer"></div>
+    </div>
+  </section>
+</main>
+<footer>제작: 구미초 교감 이희명(gyo6@kakao.com) · 모든 처리는 사용자의 브라우저에서만 이루어집니다.</footer>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const reEsc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const PATS=[
+ {id:'rrn',label:'주민·외국인등록번호',on:true,re:/(\d{6})\s*[-–]\s*([1-8]\d{6})/g},
+ {id:'mobile',label:'휴대전화번호',on:true,re:/01[016789]\s*[-.)]?\s*\d{3,4}\s*[-.]?\s*\d{4}/g},
+ {id:'tel',label:'일반 전화번호',on:true,re:/0(?:2|[3-6][1-5]|70)\s*[-.)]\s*\d{3,4}\s*[-.]\s*\d{4}/g},
+ {id:'email',label:'이메일',on:true,re:/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g},
+ {id:'name',label:'성명 칸 (성명: 홍길동)',on:true,re:/(?:성\s*명|이\s*름)\s*(?:\([^)]{0,6}\))?\s*[:：]?\s*([가-힣]{2,4})/g,g:1},
+ {id:'acct',label:'계좌번호',on:true,re:/(?<![\d-])\d{2,6}-\d{2,6}-\d{2,7}(?:-\d{1,3})?(?![\d-])/g,ok:t=>t.replace(/\D/g,'').length>=10},
+ {id:'lic',label:'운전면허번호',on:true,re:/\d{2}\s*-\s*\d{2}\s*-\s*\d{6}\s*-\s*\d{2}/g},
+ {id:'pass',label:'여권번호',on:true,re:/(?<![A-Za-z0-9])[MSRODG]\d{3}[A-Z]?\d{4,5}(?![A-Za-z0-9])/g},
+ {id:'birth',label:'생년월일·날짜',on:false,re:/(?:19|20)\d{2}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s*일?/g},
+ {id:'addr',label:'도로명 주소',on:false,re:/[가-힣]+(?:시|군|구)\s+[가-힣0-9]+(?:로|길)\s*\d+(?:-\d+)?(?:\s*\d+번길\s*\d+)?/g}
+];
+const LBL=Object.fromEntries(PATS.map(p=>[p.id,p.label]));LBL.word='지정 단어';LBL.man='직접 그림';
+let pages=[],hits=[],mans=[],fileName='',seq=0,dl=null,mode='edit';
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),2600)};
+
+$('#pats').innerHTML=PATS.map(p=>`<label class="ck"><input type="checkbox" data-p="${p.id}" ${p.on?'checked':''}> ${esc(p.label)}<small id="n-${p.id}"></small></label>`).join('');
+
+if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
+setTimeout(async()=>{try{if(window.claude&&claude.use)dl=await claude.use('downloads')}catch(e){}},0);
+
+/* ---------- 파일 열기 ---------- */
+const drop=$('#drop'),fin=$('#file');
+drop.addEventListener('click',()=>fin.click());
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fin.click()}});
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)openFile(f)});
+fin.addEventListener('change',()=>{if(fin.files[0])openFile(fin.files[0]);fin.value=''});
+
+async function openFile(f){
+  fileName=f.name.replace(/\.[^.]+$/,'');pages=[];hits=[];mans=[];
+  $('#viewer').innerHTML='<p class="note">불러오는 중…</p>';
+  $('#empty').classList.add('hide');$('#work').classList.remove('hide');
+  try{
+    if(/^image\//.test(f.type))await loadImage(f);else await loadPdf(f);
+  }catch(err){console.error(err);toast('파일을 열지 못했습니다: '+(err.message||err));reset();return}
+  buildViewer();detect();
+  const noText=pages.every(p=>!p.lines.length);
+  $('#warn').textContent=noText?'이 파일에서 글자 정보를 찾지 못했습니다(스캔본·이미지). 자동 탐지가 되지 않으니 가릴 곳을 드래그로 직접 지정하세요.':'자동 탐지는 보조 수단입니다. 저장 전에 모든 쪽을 ‘결과 미리보기’로 직접 확인하세요.';
+}
+async function loadPdf(f){
+  if(!window.pdfjsLib)throw new Error('PDF 엔진을 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
+  const doc=await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer()),isEvalSupported:false,useSystemFonts:true}).promise;
+  for(let i=1;i<=doc.numPages;i++){
+    $('#viewer').innerHTML=`<p class="note">${i} / ${doc.numPages}쪽 처리 중…</p>`;
+    const pg=await doc.getPage(i),vp=pg.getViewport({scale:1}),S=Math.min(2.5,2400/vp.width),rv=pg.getViewport({scale:S});
+    const cv=document.createElement('canvas');cv.width=Math.round(rv.width);cv.height=Math.round(rv.height);
+    const cx=cv.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);
+    await pg.render({canvasContext:cx,viewport:rv}).promise;
+    const tc=await pg.getTextContent();
+    pages.push({w:vp.width,h:vp.height,cv,lines:buildLines(tc.items,vp)});
+  }
+}
+async function loadImage(f){
+  const url=URL.createObjectURL(f),img=new Image();
+  await new Promise((r,j)=>{img.onload=r;img.onerror=()=>j(new Error('이미지를 읽을 수 없습니다'));img.src=url});
+  const cv=document.createElement('canvas');cv.width=img.naturalWidth;cv.height=img.naturalHeight;cv.getContext('2d').drawImage(img,0,0);URL.revokeObjectURL(url);
+  pages.push({w:img.naturalWidth*.75,h:img.naturalHeight*.75,cv,lines:[]});
+}
+/* 텍스트 조각 → 줄 단위 글자 배열(글자마다 위치) */
+function buildLines(items,vp){
+  const its=[];
+  for(const it of items){
+    if(!it.str||!it.str.trim())continue;
+    const t=pdfjsLib.Util.transform(vp.transform,it.transform),fh=Math.hypot(t[2],t[3])||Math.abs(it.height)||10;
+    its.push({s:it.str,x:t[4],y:t[5],w:Math.abs(it.width)||fh*it.str.length*.6,h:fh});
+  }
+  its.sort((a,b)=>a.y-b.y||a.x-b.x);
+  const rows=[];
+  for(const it of its){const r=rows.find(r=>Math.abs(r.y-it.y)<Math.min(r.h,it.h)*.5);if(r)r.its.push(it);else rows.push({y:it.y,h:it.h,its:[it]})}
+  return rows.map(r=>{
+    r.its.sort((a,b)=>a.x-b.x);const ch=[];let prev=null;
+    for(const it of r.its){
+      if(prev&&it.x-(prev.x+prev.w)>it.h*.25)ch.push({c:' '});
+      const n=it.s.length,cw=it.w/n;
+      for(let k=0;k<n;k++)ch.push({c:it.s[k],x0:it.x+cw*k,x1:it.x+cw*(k+1),t:it.y-it.h*.95,b:it.y+it.h*.22});
+      prev=it;
+    }
+    return {ch,text:ch.map(c=>c.c).join('')};
+  }).sort((a,b)=>(a.ch[0].t)-(b.ch[0].t));
+}
+
+/* ---------- 탐지 ---------- */
+function detect(){
+  const on=new Set([...document.querySelectorAll('[data-p]')].filter(i=>i.checked).map(i=>i.dataset.p));
+  const tail=$('#rrnTail').checked;
+  const words=$('#words').value.split(/[,\n]/).map(s=>s.trim()).filter(s=>s.length>=1);
+  const wordRe=words.length?new RegExp(words.map(w=>[...w.replace(/\s+/g,'')].map(reEsc).join('\\s*')).join('|'),'g'):null;
+  const prevOff=new Set(hits.filter(h=>!h.on).map(h=>h.key));
+  hits=[];const cnt={};
+  pages.forEach((pg,pi)=>pg.lines.forEach((ln,li)=>{
+    const rs=[];
+    const run=(re,type,fn)=>{re.lastIndex=0;let m;while((m=re.exec(ln.text))){if(!m[0])break;const r=fn(m);if(r)rs.push({...r,type})}};
+    if(wordRe)run(wordRe,'word',m=>({s:m.index,e:m.index+m[0].length}));
+    for(const p of PATS){if(!on.has(p.id))continue;run(p.re,p.id,m=>{
+      if(p.ok&&!p.ok(m[0]))return null;
+      if(p.id==='rrn'&&tail){const s=m.index+m[0].lastIndexOf(m[2]);return{s,e:s+m[2].length}}
+      if(p.g){const s=m.index+m[0].lastIndexOf(m[p.g]);return{s,e:s+m[p.g].length}}
+      return{s:m.index,e:m.index+m[0].length}})}
+    rs.sort((a,b)=>a.s-b.s);let end=-1;
+    for(const r of rs){if(r.s<end)continue;end=r.e;
+      const cs=ln.ch.slice(r.s,r.e).filter(c=>c.x0!=null);if(!cs.length)continue;
+      const box={x:Math.min(...cs.map(c=>c.x0))-1.5,y:Math.min(...cs.map(c=>c.t))-1,w:0,h:0};
+      box.w=Math.max(...cs.map(c=>c.x1))+1.5-box.x;box.h=Math.max(...cs.map(c=>c.b))+1-box.y;
+      const raw=ln.text.slice(r.s,r.e),key=pi+'|'+li+'|'+r.s+'|'+r.type;
+      hits.push({id:++seq,key,page:pi,type:r.type,raw,box,on:!prevOff.has(key)});cnt[r.type]=(cnt[r.type]||0)+1;
+    }
+  }));
+  for(const p of PATS)$('#n-'+p.id).textContent=cnt[p.id]?cnt[p.id]+'건':'';
+  render();
+}
+const peek=s=>{const t=s.replace(/\s+/g,'');return t.length<=2?t[0]+'*':t.slice(0,2)+'*'.repeat(Math.min(8,t.length-2))};
+
+/* ---------- 화면 ---------- */
+function buildViewer(){
+  $('#viewer').innerHTML=pages.map((p,i)=>`<div class="pg" data-i="${i}" style="aspect-ratio:${p.w}/${p.h}"><span class="no">${i+1}쪽</span><div class="ov"></div></div>`).join('');
+  document.querySelectorAll('.pg').forEach((el,i)=>{el.insertBefore(pages[i].cv,el.firstChild);bindDraw(el,i)});
+}
+function render(){
+  document.querySelectorAll('.pg').forEach((el,i)=>{
+    const p=pages[i],ov=el.querySelector('.ov');
+    const all=[...hits.filter(h=>h.page===i),...mans.filter(m=>m.page===i)];
+    ov.innerHTML=all.map(h=>`<div class="bx ${h.type==='man'?'man':''} ${h.on?'':'off'}" data-id="${h.id}" title="${esc(LBL[h.type])}" style="left:${h.box.x/p.w*100}%;top:${h.box.y/p.h*100}%;width:${h.box.w/p.w*100}%;height:${h.box.h/p.h*100}%"></div>`).join('');
+  });
+  const items=[...hits,...mans].sort((a,b)=>a.page-b.page||a.box.y-b.box.y);
+  $('#list').innerHTML=items.length?items.map(h=>`<li><input type="checkbox" data-t="${h.id}" ${h.on?'checked':''} aria-label="적용"><span class="t">${esc(LBL[h.type])}</span><span class="v">${h.type==='man'?'—':esc(peek(h.raw))}</span><button type="button" class="p" data-go="${h.id}">${h.page+1}쪽</button></li>`).join(''):'<li class="note">아직 찾은 항목이 없습니다.</li>';
+  const act=items.filter(h=>h.on).length;
+  $('#stat').innerHTML=`<span><b>${pages.length}</b>쪽</span><span><b>${hits.length}</b>건 탐지</span><span><b>${mans.length}</b>개 직접</span><span><b>${act}</b>곳 가림</span>`;
+}
+const find=id=>hits.find(h=>h.id===id)||mans.find(h=>h.id===id);
+$('#viewer').addEventListener('click',e=>{
+  if(mode!=='edit')return;const b=e.target.closest('.bx');if(!b)return;
+  const h=find(+b.dataset.id);if(!h)return;
+  if(h.type==='man')mans=mans.filter(m=>m!==h);else h.on=!h.on;render();
+});
+$('#list').addEventListener('change',e=>{const id=e.target.dataset.t;if(!id)return;const h=find(+id);if(h){h.on=e.target.checked;render()}});
+$('#list').addEventListener('click',e=>{const id=e.target.dataset.go;if(!id)return;const b=document.querySelector(`.bx[data-id="${id}"]`);if(b){b.scrollIntoView({behavior:'smooth',block:'center'});b.classList.add('flash');setTimeout(()=>b.classList.remove('flash'),2500)}});
+function bindDraw(el,i){
+  const ov=el.querySelector('.ov');let st=null,tmp=null;
+  const pt=e=>{const r=ov.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),r}};
+  ov.addEventListener('pointerdown',e=>{if(mode!=='edit'||e.target.closest('.bx')||e.button>0)return;st=pt(e);tmp=document.createElement('div');tmp.className='bx tmp';ov.appendChild(tmp);ov.setPointerCapture(e.pointerId)});
+  ov.addEventListener('pointermove',e=>{if(!st)return;const p=pt(e);Object.assign(tmp.style,{left:Math.min(st.x,p.x)*100+'%',top:Math.min(st.y,p.y)*100+'%',width:Math.abs(p.x-st.x)*100+'%',height:Math.abs(p.y-st.y)*100+'%'})});
+  const up=e=>{if(!st)return;const p=pt(e),pw=pages[i].w,ph=pages[i].h;
+    if(Math.abs(p.x-st.x)*p.r.width>4&&Math.abs(p.y-st.y)*p.r.height>4){mans.push({id:++seq,page:i,type:'man',raw:'',on:true,box:{x:Math.min(st.x,p.x)*pw,y:Math.min(st.y,p.y)*ph,w:Math.abs(p.x-st.x)*pw,h:Math.abs(p.y-st.y)*ph}})}
+    st=null;tmp&&tmp.remove();tmp=null;render()};
+  ov.addEventListener('pointerup',up);ov.addEventListener('pointercancel',up);
+}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/TEXTAREA|INPUT/.test(document.activeElement.tagName)&&mans.length){e.preventDefault();mans.pop();render();toast('직접 그린 상자 하나를 되돌렸습니다')}});
+const setMode=m=>{mode=m;$('#viewer').classList.toggle('final',m==='final');$('#vEdit').setAttribute('aria-pressed',m==='edit');$('#vFinal').setAttribute('aria-pressed',m==='final')};
+$('#vEdit').addEventListener('click',()=>setMode('edit'));$('#vFinal').addEventListener('click',()=>setMode('final'));
+$('#pats').addEventListener('change',detect);$('#rrnTail').addEventListener('change',detect);
+let wt;$('#words').addEventListener('input',()=>{clearTimeout(wt);wt=setTimeout(detect,350)});
+$('#clrMan').addEventListener('click',()=>{mans=[];render()});
+function reset(){pages=[];hits=[];mans=[];$('#viewer').innerHTML='';$('#work').classList.add('hide');$('#empty').classList.remove('hide');setMode('edit')}
+$('#reset').addEventListener('click',reset);
+
+/* ---------- 내보내기 ---------- */
+const active=i=>[...hits,...mans].filter(h=>h.on&&h.page===i);
+function maskedText(){
+  return pages.map((p,i)=>{const bs=active(i).map(h=>h.box);
+    const body=p.lines.map(ln=>ln.ch.map(c=>{if(c.x0==null)return c.c;const cx=(c.x0+c.x1)/2,cy=(c.t+c.b)/2;return bs.some(b=>cx>=b.x&&cx<=b.x+b.w&&cy>=b.y&&cy<=b.y+b.h)?'■':c.c}).join('')).join('\n');
+    return `--- ${i+1}쪽 ---\n${body||'(글자 정보 없음)'}`}).join('\n\n');
+}
+async function save(name,data){
+  try{
+    if(dl){await dl.save({filename:name,data});toast('저장했습니다: '+name);return}
+    const u=URL.createObjectURL(data instanceof Blob?data:new Blob([data])),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
+  }catch(err){toast(err&&err.code==='declined'?'저장을 취소했습니다':'저장하지 못했습니다'+(err&&err.code?' ('+err.code+')':''))}
+}
+$('#savePdf').addEventListener('click',async()=>{
+  if(!window.jspdf){toast('PDF 생성 엔진을 불러오지 못했습니다');return}
+  const btn=$('#savePdf');btn.disabled=true;btn.textContent='만드는 중…';
+  try{
+    const {jsPDF}=window.jspdf;let doc=null;
+    pages.forEach((p,i)=>{
+      const c=document.createElement('canvas');c.width=p.cv.width;c.height=p.cv.height;const x=c.getContext('2d');
+      x.drawImage(p.cv,0,0);x.fillStyle='#000';const k=c.width/p.w;
+      for(const h of active(i))x.fillRect(h.box.x*k,h.box.y*k,h.box.w*k,h.box.h*k);
+      const o=p.w>p.h?'l':'p';
+      if(!doc)doc=new jsPDF({unit:'pt',format:[p.w,p.h],orientation:o,compress:true});else doc.addPage([p.w,p.h],o);
+      doc.addImage(c.toDataURL('image/jpeg',.9),'JPEG',0,0,p.w,p.h);
+    });
+    await save(fileName+'_마스킹.pdf',doc.output('blob'));
+  }catch(err){console.error(err);toast('PDF를 만들지 못했습니다')}
+  btn.disabled=false;btn.textContent='마스킹 PDF 저장';
+});
+$('#copyTxt').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(maskedText());toast('가린 텍스트를 복사했습니다. Claude 대화창에 붙여넣으세요')}catch(e){toast('복사가 막혀 있습니다. 텍스트(.txt) 저장을 이용하세요')}});
+$('#saveTxt').addEventListener('click',()=>save(fileName+'_마스킹.txt',maskedText()));
+}
+</script>
+</body>
+</html>
