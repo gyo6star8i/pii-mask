@@ -194,7 +194,7 @@ const PATS=[
  {id:'lic',label:'운전면허번호',on:true,re:/\d{2}\s*-\s*\d{2}\s*-\s*\d{6}\s*-\s*\d{2}/g},
  {id:'pass',label:'여권번호',on:true,re:/(?<![A-Za-z0-9])[MSRODG]\d{3}[A-Z]?\d{4,5}(?![A-Za-z0-9])/g},
  {id:'birth',label:'생년월일·날짜',on:false,re:/(?:19|20)\d{2}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s*일?/g},
- {id:'addr',label:'도로명 주소',on:false,re:/[가-힣]+(?:시|군|구)\s+[가-힣0-9]+(?:로|길)\s*\d+(?:-\d+)?(?:\s*\d+번길\s*\d+)?/g}
+ {id:'addr',label:'도로명 주소',on:false,re:/(?:[가-힣]+(?:도|특별시|광역시|특별자치시)\s+)?[가-힣]+(?:시|군|구)\s+[가-힣0-9]+(?:로|길)\s*\d+(?:-\d+)?(?:\s*\d+번길\s*\d+)?/g}
 ];
 const LBL=Object.fromEntries(PATS.map(p=>[p.id,p.label]));LBL.word='지정 단어';LBL.man='직접 그림';
 let pages=[],hits=[],mans=[],fileName='',seq=0,dl=null,mode='edit';
@@ -374,11 +374,13 @@ const tagOf=h=>$('#tagMode').value==='type'?'['+(TAG[h.type]||'가림')+']':'[�
 /* 한 쪽의 줄을 조각으로 나눔: 가린 글자는 상자 단위로 [가림] 하나, 나머지는 원래 글자 그대로 */
 function segs(i){
   const hs=active(i);
-  return pages[i].lines.map(ln=>{const out=[];let cur=null;
+  return pages[i].lines.map(ln=>{const out=[];let cur=null,pend=false;
     for(const c of ln.ch){
-      if(c.x0==null){cur=null;out.push({sp:1});continue}
+      if(c.x0==null){if(cur&&cur.m)pend=true;else{cur=null;out.push({sp:1})}continue}
       const cx=(c.x0+c.x1)/2,cy=(c.t+c.b)/2,h=hs.find(h=>{const b=h.box;return cx>=b.x&&cx<=b.x+b.w&&cy>=b.y&&cy<=b.y+b.h});
-      if(h){if(cur&&cur.m===h){cur.x1=c.x1;continue}cur={m:h,t:tagOf(h),x0:c.x0,x1:c.x1,bl:c.bl,fs:c.fs}}
+      if(h&&cur&&cur.m===h){cur.x1=c.x1;pend=false;continue}
+      if(pend){out.push({sp:1});pend=false;cur=null}
+      if(h){cur={m:h,t:tagOf(h),x0:c.x0,x1:c.x1,bl:c.bl,fs:c.fs}}
       else{if(cur&&!cur.m&&cur.k===c.k){cur.t+=c.c;cur.x1=c.x1;continue}cur={k:c.k,t:c.c,x0:c.x0,x1:c.x1,bl:c.bl,fs:c.fs}}
       out.push(cur);
     }
